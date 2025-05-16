@@ -1,8 +1,146 @@
 import { books, authors, genres, BOOKS_PER_PAGE } from './data.js'
 
 /**
+ * Book Preview Web Component
+ * A custom element that displays a book preview with image, title, and author
+ */
+class BookPreview extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+  }
+
+  static get observedAttributes() {
+    return ['author', 'id', 'image', 'title', 'author-name'];
+  }
+
+  connectedCallback() {
+    this.render();
+    this.addEventListeners();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+  }
+
+  disconnectedCallback() {
+    this.removeEventListeners();
+  }
+
+  addEventListeners() {
+    this.button = this.shadowRoot.querySelector('.preview');
+    if (this.button) {
+      this.button.addEventListener('click', this.handleClick.bind(this));
+    }
+  }
+
+  removeEventListeners() {
+    if (this.button) {
+      this.button.removeEventListener('click', this.handleClick.bind(this));
+    }
+  }
+
+  handleClick(event) {
+    // Dispatch a custom event that bubbles up to parent elements
+    this.dispatchEvent(new CustomEvent('preview-click', {
+      bubbles: true,
+      composed: true, // Allows the event to cross the shadow DOM boundary
+      detail: {
+        bookId: this.getAttribute('id')
+      }
+    }));
+  }
+
+  render() {
+    const author = this.getAttribute('author');
+    const id = this.getAttribute('id');
+    const image = this.getAttribute('image');
+    const title = this.getAttribute('title');
+    const authorName = this.getAttribute('author-name');
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          width: 100%;
+        }
+        
+        .preview {
+          border-width: 0;
+          width: 100%;
+          font-family: Roboto, sans-serif;
+          padding: 0.5rem 1rem;
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+          text-align: left;
+          border-radius: 8px;
+          border: 1px solid rgba(var(--color-dark, 10, 10, 20), 0.15);
+          background: rgba(var(--color-light, 255, 255, 255), 1);
+        }
+        
+        @media (min-width: 60rem) {
+          .preview {
+            padding: 1rem;
+          }
+        }
+        
+        .preview:hover {
+          background: rgba(var(--color-blue, 0, 150, 255), 0.05);
+        }
+        
+        .preview__image {
+          width: 48px;
+          height: 70px;
+          object-fit: cover;
+          background: grey;
+          border-radius: 2px;
+          box-shadow: 0px 2px 1px -1px rgba(0, 0, 0, 0.2),
+            0px 1px 1px 0px rgba(0, 0, 0, 0.1), 0px 1px 3px 0px rgba(0, 0, 0, 0.1);
+        }
+        
+        .preview__info {
+          padding: 1rem;
+        }
+        
+        .preview__title {
+          margin: 0 0 0.5rem;
+          font-weight: bold;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;  
+          overflow: hidden;
+          color: rgba(var(--color-dark, 10, 10, 20), 0.8)
+        }
+        
+        .preview__author {
+          color: rgba(var(--color-dark, 10, 10, 20), 0.4);
+        }
+      </style>
+      
+      <button class="preview" data-preview="${id}">
+        <img
+          class="preview__image"
+          src="${image}"
+          alt="Cover for ${title}"
+        />
+        
+        <div class="preview__info">
+          <h3 class="preview__title">${title}</h3>
+          <div class="preview__author">${authorName}</div>
+        </div>
+      </button>
+    `;
+  }
+}
+
+// Register the custom element
+customElements.define('book-preview', BookPreview);
+
+/**
  * Book Connect Application
  * A modular application for browsing and searching books.
+ * Refactored to use Web Components for book previews.
  */
 const BookConnect = {
   /**
@@ -54,27 +192,18 @@ const BookConnect = {
   },
 
   /**
-   * Create a book preview element
+   * Create a book preview using the Web Component
    * @param {Object} book - Book object containing author, id, image, title
-   * @returns {HTMLElement} - Button element with book preview information
+   * @returns {HTMLElement} - BookPreview Web Component
    */
   createBookPreview({ author, id, image, title }) {
-    const element = document.createElement('button');
-    element.classList = 'preview';
-    element.setAttribute('data-preview', id);
-
-    element.innerHTML = `
-        <img
-            class="preview__image"
-            src="${image}"
-        />
-        
-        <div class="preview__info">
-            <h3 class="preview__title">${title}</h3>
-            <div class="preview__author">${authors[author]}</div>
-        </div>
-    `;
-
+    const element = document.createElement('book-preview');
+    element.setAttribute('author', author);
+    element.setAttribute('id', id);
+    element.setAttribute('image', image);
+    element.setAttribute('title', title);
+    element.setAttribute('author-name', authors[author]);
+    
     return element;
   },
 
@@ -305,18 +434,12 @@ const BookConnect = {
       this.updateShowMoreButton();
     });
 
-    // Book selection for viewing details
-    document.querySelector(this.selectors.listItems).addEventListener('click', (event) => {
-      const pathArray = Array.from(event.path || event.composedPath());
-      
-      for (const node of pathArray) {
-        if (node?.dataset?.preview) {
-          const book = this.findBookById(node.dataset.preview);
-          if (book) {
-            this.showBookDetails(book);
-            break;
-          }
-        }
+    // Book preview click event (using event delegation with custom events)
+    document.querySelector(this.selectors.listItems).addEventListener('preview-click', (event) => {
+      const bookId = event.detail.bookId;
+      const book = this.findBookById(bookId);
+      if (book) {
+        this.showBookDetails(book);
       }
     });
   }
